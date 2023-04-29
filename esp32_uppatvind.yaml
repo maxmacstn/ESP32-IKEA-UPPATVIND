@@ -1,0 +1,323 @@
+##############
+# Setup here #
+##############
+
+substitutions:
+
+  # General setup
+  device_name: "esp32-uppatvind"
+  PM25_sensor_entity_id: "sensor.vindrikning_maxs_bedroom_pm2_5"
+
+  # Motor PWM frequency setting, you can overclock/overload your fan motor here.
+  pwm_low: "124"
+  pwm_mid: "198"
+  pwm_high: "257"
+
+  # AUTO fan mode threshold setting
+  #
+  # PM2.5 level:       15      35
+  #                     V       V          
+  # Fan level  :   low  |  mid  | high  
+  PM25_mid: "16"
+  PM25_high: "36"
+
+  
+  
+##############
+# End setup  #
+##############
+
+globals:
+  - id: PM25_mid_int
+    type: int
+    restore_value: no
+    initial_value: $PM25_mid
+  - id: PM25_high_int
+    type: int
+    restore_value: no
+    initial_value: $PM25_high
+  
+  - id: pwm_freq_low_int
+    type: int
+    restore_value: no
+    initial_value: $pwm_low
+  - id: pwm_freq_mid_int
+    type: int
+    restore_value: no
+    initial_value: $pwm_mid
+
+  - id: pwm_freq_high_int
+    type: int
+    restore_value: no
+    initial_value: $pwm_high
+
+  - id: filter_runtime
+    type: unsigned int
+    restore_value: yes
+    initial_value: "0"
+
+  # - id: pwm_freq_auto
+  #   type: int
+  #   restore_value: no
+  #   initial_value: 0
+  
+
+esphome:
+  name: $device_name
+  project:
+    name: "magi-DPSW.esp32uppatvind"
+    version: "1.0.0"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+    logs:
+        switch: NONE
+        output: NONE
+
+api:
+  password: ""
+
+ota:
+  password: ""
+
+# esp32_improv:
+#   authorizer: btn_inside
+
+wifi:
+  # ssid: $wifi_ssid
+  # password: $wifi_password
+# Enable fallback hotspot 
+    ap:
+      ssid: "ESP UPPÅTVIND"
+      password: "1122334455"
+
+captive_portal:
+
+# Pin output settings
+output:
+  - platform: ledc
+    pin: GPIO4
+    id: PWM_OUT
+    
+
+
+switch:
+  - platform: gpio
+    pin: GPIO19
+    id: motor_en
+    name: "Power"
+    
+  - platform: gpio
+    id: led_wifi
+    pin: GPIO18
+
+  - platform: gpio
+    id: led_speed
+    pin: GPIO5
+    
+  - platform: gpio
+    id: led_auto
+    pin: GPIO17
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO16
+      inverted: true
+      mode:
+        input: true
+    id: btn_top
+    internal: true
+    icon: "mdi:air-filter"
+    on_press:
+     - lambda: |-
+        // If already on
+        if(id(motor_en).state){
+            
+            //if on last mode and pressed button, turn off.
+
+
+            if(id(fan_level).size()-1 == id(fan_level).active_index()){
+                id(motor_en).turn_off();
+                id(led_speed).turn_off();
+                id(led_auto).turn_off();
+            }
+      
+            
+            auto call = id(fan_level).make_call();
+            call.select_next(true);
+            call.perform();
+
+
+        }else{
+            id(motor_en).turn_on();
+        
+        }
+        return;
+        
+  - platform: gpio
+    pin:
+        number: GPIO0
+        inverted: true
+        mode:
+            input: true
+    id: btn_inside
+    internal: true
+    on_click:
+      - min_length: 1000ms
+        max_length: 2500ms
+        then:
+        - lambda: |-
+            for(int i = 0 ; i <12 ; i++){
+              id(led_speed).toggle();
+              delay(80);
+            }
+            id(filter_runtime) = 0.0;
+
+      - min_length: 5000ms
+        max_length: 10000ms
+        then:
+        - lambda: |-
+            for(int i = 0 ; i <12 ; i++){
+              id(led_wifi).toggle();
+              delay(80);
+            }
+
+
+
+sensor:
+  - platform: homeassistant
+    id: pm_25_sensor
+    name: "PM2.5 Sensor From Home Assistant"
+    entity_id: $PM25_sensor_entity_id
+    filters:
+    - quantile:
+        window_size: 20
+        send_every: 5
+        send_first_at: 1
+        quantile: .9
+
+  - platform: template
+    name: Filter runtime
+    unit_of_measurement: "Hr"
+    icon: "mdi:clock"
+    device_class: "duration"
+    state_class: "total_increasing"
+    accuracy_decimals: 1
+    lambda: |-
+      return id(filter_runtime)/60.0;
+
+
+interval:
+  
+  # Update Wi-Fi LED Task
+  - interval: 1s
+    then:
+      if:
+        condition:
+          wifi.connected:
+        then:
+          - switch.turn_on: led_wifi
+
+        else:
+          - switch.turn_on: led_wifi
+          - delay: 500ms
+          - switch.turn_off: led_wifi
+          
+  # Update status LED Task
+  - interval: 100ms
+    then:
+      lambda: |-
+        if (id(motor_en).state && id(fan_level).state != "Auto")
+        {
+            id(led_speed).turn_on();
+            id(led_auto).turn_off();
+        }
+        else if (id(motor_en).state && id(fan_level).state == "Auto"){
+            id(led_speed).turn_off();
+            id(led_auto).turn_on();
+        }else{
+            id(led_speed).turn_off();
+            id(led_auto).turn_off();
+        }
+
+  # Auto mode task
+  - interval: 5s
+    then:
+      if:
+        condition:
+          lambda: |-
+            return id(fan_level).state == "Auto";
+        then:
+          lambda: |-
+            int pm25 = id(pm_25_sensor).state;
+            
+            if (pm25 < id(PM25_mid_int)){
+              id(PWM_OUT).update_frequency(id(pwm_freq_low_int));
+            }else if (pm25 < id(PM25_high_int)){
+              id(PWM_OUT).update_frequency(id(pwm_freq_mid_int));
+            }else {
+              id(PWM_OUT).update_frequency(id(pwm_freq_high_int));
+            }
+
+  - interval: 5min
+    then:
+      if:
+          condition:
+            switch.is_on: motor_en
+          then:
+            lambda: |-
+              id(filter_runtime) += 5;
+        
+select:
+ - platform: template
+   name: Fan level
+   id: fan_level
+   options:
+    - "Low"
+    - "Medium"
+    - "High"
+    - "Auto"
+   initial_option: "Low"
+   optimistic: true
+   icon: "mdi:fan"
+   on_value:
+      - output.set_level:
+          id: PWM_OUT
+          level: "50%"
+        
+        #Set motor speed using frequency.
+      - output.ledc.set_frequency:
+            id: PWM_OUT
+            frequency: !lambda |-
+              if (id(fan_level).active_index() == 0){
+                      return id(pwm_freq_low_int);
+              }
+              else if (id(fan_level).active_index() == 1){
+                      return id(pwm_freq_mid_int);
+              }
+              else if (id(fan_level).active_index() == 2){
+                      return id(pwm_freq_high_int);
+              }
+              else{
+                      return 0;
+              }
+        
+        #Set LED 
+      - lambda: |-
+            if ( id(fan_level).state != "Auto" && id(motor_en).state){
+                for (int i = 0; i <= id(fan_level).active_index(); i++){
+                    id(led_speed).turn_off();
+                    delay(200);
+                    id(led_speed).turn_on();
+                    delay(200);
+                }
+            }
+              
+
+          
+        
