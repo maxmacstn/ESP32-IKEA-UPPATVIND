@@ -8,7 +8,7 @@ substitutions:
   device_name: "esp32-uppatvind"
   PM25_sensor_entity_id: "sensor.vindrikning_maxs_bedroom_pm2_5"
 
-  # Motor PWM frequency setting, you can overclock/overload your fan motor here.
+  # Motor PWM frequency setting, you can overclock/overload your motor here.
   pwm_low: "124"
   pwm_mid: "198"
   pwm_high: "257"
@@ -90,12 +90,16 @@ ota:
 wifi:
   # ssid: $wifi_ssid
   # password: $wifi_password
-# Enable fallback hotspot 
-    ap:
-      ssid: "ESP UPPÅTVIND"
-      password: "1122334455"
+  
+  #Enable fallback hotspot 
+  ap:
+    ssid: "ESP UPPÅTVIND"
+    password: "1122334455"
 
 captive_portal:
+
+web_server:
+  port: 80
 
 # Pin output settings
 output:
@@ -103,7 +107,6 @@ output:
     pin: GPIO4
     id: PWM_OUT
     
-
 
 switch:
   - platform: gpio
@@ -221,7 +224,13 @@ interval:
         condition:
           wifi.connected:
         then:
-          - switch.turn_on: led_wifi
+          if:
+            condition:
+                switch.is_on: motor_en
+            then:
+              - switch.turn_on: led_wifi
+            else:
+              - switch.turn_off: led_wifi
 
         else:
           - switch.turn_on: led_wifi
