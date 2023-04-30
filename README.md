@@ -1,6 +1,6 @@
 # ESPHome ESP32 UPPÅTVIND
 
-![](https://raw.githubusercontent.com/maxmacstn/ESP32-IKEA-UPPATVIND/main/images/pcb-3D.jpg)
+![](https://raw.githubusercontent.com/maxmacstn/ESP32-IKEA-UPPATVIND/main/images/pcb-3D.png)
 
 This project aims to transform the IKEA UPPÅTVIND air purifier into a smart air purifier that can be controlled through the Home Assistant platform. The project utilizes ESPHome as its source code.
 
@@ -18,6 +18,6 @@ To accomplish this, a custom controller board equipped with an ESP32 microcontro
 
 ## Images
 
-![](https://raw.githubusercontent.com/maxmacstn/ESP32-IKEA-UPPATVIND/main/images/pcb-front.jpg)
-![](https://raw.githubusercontent.com/maxmacstn/ESP32-IKEA-UPPATVIND/main/images/pcb-installed.jpg)
+![](https://raw.githubusercontent.com/maxmacstn/ESP32-IKEA-UPPATVIND/main/images/pcb-front.jpeg)
+![](https://raw.githubusercontent.com/maxmacstn/ESP32-IKEA-UPPATVIND/main/images/pcb-installed.jpeg)
 
